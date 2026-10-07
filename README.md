@@ -1,6 +1,6 @@
 # snip
 
-Press **Ctrl+Shift+S**, drag a rectangle, and the screenshot is on your clipboard. Esc or right-click cancels.
+Press **Win+Shift+S** (Super+Shift+S on Linux), drag a rectangle, and the screenshot is on your clipboard. Esc or right-click cancels.
 
 ## Windows
 
@@ -11,7 +11,7 @@ cargo build --release
 target\release\snip.exe
 ```
 
-Left-click the tray icon to take a capture. Right-click it and choose Exit to quit.
+Left-click the tray icon to take a capture. Right-click it and choose Exit to quit. While snip is running it takes over Win+Shift+S from the built-in Snipping Tool.
 
 ## Linux (Omarchy / Hyprland)
 

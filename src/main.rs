@@ -1,5 +1,5 @@
 #![windows_subsystem = "windows"]
-//! Tray app: Ctrl+Shift+S (or left-click tray icon) -> drag a rectangle -> image on clipboard.
+//! Tray app: Win+Shift+S (or left-click tray icon) -> drag a rectangle -> image on clipboard.
 //! Esc / right-click cancels. Right-click tray icon -> Exit.
 
 use std::{cell::Cell, mem::zeroed, os::windows::ffi::OsStrExt, ptr::null_mut as null, slice};
@@ -43,16 +43,18 @@ fn main() {
             hCursor: LoadCursorW(null(), IDC_CROSS),
             ..zeroed()
         };
+        if !FindWindowW(class, null()).is_null() {
+            return; // already running
+        }
         RegisterClassW(&wc);
         // One window does everything: hidden while idle, fullscreen overlay while selecting.
         let hwnd = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
             class, class, WS_POPUP, 0, 0, 0, 0, null(), null(), inst, null(),
         );
-        if RegisterHotKey(hwnd, 1, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 'S' as u32) == 0 {
-            MessageBoxW(null(), w!("Ctrl+Shift+S is already taken (snip already running?)"), class, MB_ICONERROR);
-            return;
-        }
+        // Win+Shift+S belongs to Windows' Snipping Tool, so RegisterHotKey can't have it;
+        // a low-level hook sees the keys first and swallows them.
+        SetWindowsHookExW(WH_KEYBOARD_LL, Some(kbd), inst, 0);
 
         let mut nid = NOTIFYICONDATAW {
             cbSize: size_of::<NOTIFYICONDATAW>() as u32,
@@ -63,7 +65,7 @@ fn main() {
             hIcon: LoadIconW(null(), IDI_APPLICATION),
             ..zeroed()
         };
-        for (d, s) in nid.szTip.iter_mut().zip("Snip (Ctrl+Shift+S)".encode_utf16()) {
+        for (d, s) in nid.szTip.iter_mut().zip("Snip (Win+Shift+S)".encode_utf16()) {
             *d = s;
         }
         Shell_NotifyIconW(NIM_ADD, &nid);
@@ -124,6 +126,32 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             _ => return DefWindowProcW(hwnd, msg, wp, lp),
         }
         0
+    }
+}
+
+/// Win+Shift+S starts a capture; Esc cancels one even if the overlay didn't get keyboard focus.
+unsafe extern "system" fn kbd(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    unsafe {
+        let vk = (*(lp as *const KBDLLHOOKSTRUCT)).vkCode;
+        let down = wp == WM_KEYDOWN as usize || wp == WM_SYSKEYDOWN as usize;
+        let held = |k: VIRTUAL_KEY| GetAsyncKeyState(k as i32) < 0;
+        let hwnd = FindWindowW(w!("snip"), null());
+        if code >= 0 && vk == 'S' as u32 && held(VK_SHIFT) && (held(VK_LWIN) || held(VK_RWIN)) {
+            if down {
+                // Tap an unassigned key so releasing Win doesn't open the Start menu.
+                keybd_event(0xE8, 0, 0, 0);
+                keybd_event(0xE8, 0, KEYEVENTF_KEYUP, 0);
+                PostMessageW(hwnd, WM_HOTKEY, 0, 0);
+            }
+            return 1;
+        }
+        if code >= 0 && vk == VK_ESCAPE as u32 && SHOT.get().is_some() {
+            if down {
+                PostMessageW(hwnd, WM_KEYDOWN, VK_ESCAPE as usize, 0);
+            }
+            return 1;
+        }
+        CallNextHookEx(null(), code, wp, lp)
     }
 }
 
