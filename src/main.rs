@@ -62,7 +62,11 @@ fn main() {
             uID: 1,
             uFlags: NIF_ICON | NIF_MESSAGE | NIF_TIP,
             uCallbackMessage: WM_TRAY,
-            hIcon: LoadIconW(null(), IDI_APPLICATION),
+            // Embedded icon (assets/snip.rc), loaded at small-icon size so the tray stays crisp.
+            hIcon: LoadImageW(
+                inst, 1 as _, IMAGE_ICON,
+                GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0,
+            ),
             ..zeroed()
         };
         for (d, s) in nid.szTip.iter_mut().zip("Snip (Win+Shift+S)".encode_utf16()) {
